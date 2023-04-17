@@ -200,3 +200,7 @@ This example demonstrates how to train and test a neural network with the Clippe
 # License
 
 This project is licensed under the MIT License.
+
+# References
+Similar to that below, so I put a reference
+Chen, Binghui, Weihong Deng, and Junping Du. "Noisy softmax: Improving the generalization ability of dcnn via postponing the early softmax saturation." Proceedings of the IEEE conference on computer vision and pattern recognition. 2017.
