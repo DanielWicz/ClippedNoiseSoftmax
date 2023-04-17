@@ -1,4 +1,4 @@
-# Noisy Softmax
+# Clipped Noise Softmax
 
 A PyTorch module implementing a noisy version of the softmax function, adding noise during training. To use this, you have to add it after the Softmax layer. By default, the noise is applied only for the values that are close to 0.1 or 0.9, and that can be adjusted with the parameter alpha.
 
@@ -11,17 +11,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class NoisySoftmax(nn.Module):
-    """
-    A PyTorch module implementing a noisy version of the softmax function, adding noise during training.
-    To use this, you have to add it after the Softmax layer. By default the noise is applied only for the values
-    that are close to 0.1 or 0.9, and that can be adjusted with parameter `alpha`.
-    Creator: Daniel Wiczew
+
+class ClippedNoiseSoftmax(nn.Module):
+    """A PyTorch module implementing a clipped noise version of the softmax function, adding noise during training,
+       but only when the value is close to the 0.9 and 0.1, which where the gradients are close to 0 and prevents proper
+       training.
+       To use this, you have to add it after the Softmax layer. By default the noise is applied only for the values
+       that are close to 0.1 or 0.9, and that can be adjusted with parameter `alpha`.
+       Creator: Daniel Wiczew
     """
 
     def __init__(self, stddev=1.0, alpha=0.1, log=False):
         """
-        Initialize the NoisySoftmax module.
+        Initialize the ClippedNoiseSoftmax module.
 
         Args:
         stddev (float, optional): The standard deviation of the noise. Default is 1.0.
@@ -31,8 +33,11 @@ class NoisySoftmax(nn.Module):
         super().__init__()  # Initialize the parent class (nn.Module)
         self.stddev = stddev  # Standard deviation of the noise
         self.alpha = alpha  # Threshold for noise filter
-        self.log = log  # Whether the input is in log space, helpful if LogSoftmax is used instead of Softmax
+        self.log = log  # Whether the input is in log space
         self.eps = 1e-3  # Small constant to prevent division by zero
+
+    def center_function(self, x, min_value, max_value):
+        return torch.where((x > min_value) & (x < max_value), x, torch.zeros_like(x))
 
     def filter_noise(self, x, noise):
         """
@@ -45,21 +50,23 @@ class NoisySoftmax(nn.Module):
         Returns:
         Tensor: The filtered noise tensor.
         """
-        upper_limit = 1 - self.alpha  # Calculate the upper limit for filtering (e.g., 0.9)
+        upper_limit = (
+            1 - self.alpha
+        )  # Calculate the upper limit for filtering (e.g., 0.9)
         lower_limit = self.alpha  # Calculate the lower limit for filtering (e.g., 0.1)
-        
+
         # Calculate the noise for values greater than the upper limit
         noise_one = noise * (-1) * F.hardtanh(x, upper_limit, 1.0) / upper_limit
-        
+
         # Calculate the noise for values between 0 and the lower limit
-        noise_zero = noise * center_function(x, 0.0, lower_limit) / lower_limit
-        
+        noise_zero = noise * self.center_function(x, 0.0, lower_limit) / lower_limit
+
         # Combine both noises and clamp the result between 0 and 1
         return torch.clamp(noise_one + noise_zero, min=0.0, max=1.0)
 
     def forward(self, x):
         """
-        Forward pass of the NoisySoftmax module.
+        Forward pass of the ClippedNoiseSoftmax module.
 
         Args:
         x (Tensor): Input tensor.
@@ -70,24 +77,25 @@ class NoisySoftmax(nn.Module):
         if self.training:  # Check if the module is in training mode
             if self.log:  # If input is in log space, convert to normal space
                 x = torch.exp(x)
-                
-            noise = torch.rand_like(x) * self.stddev  # Generate random noise with the same shape as x
+
+            noise = (
+                torch.rand_like(x) * self.stddev
+            )  # Generate random noise with the same shape as x
             noise = self.filter_noise(x, noise)  # Apply the noise filter
             output = x + noise  # Add the filtered noise to the input
-            
+
             if self.log:  # If input was in log space, convert back to log space
                 output = torch.log(output)
-                
+
             return output
         else:  # If not in training mode, return the input unchanged
             return x
-            
 ```
 
 
 # Usage
 
-To use the `NoisySoftmax` module in your neural network, simply add it after the softmax layer. Here's an example:
+To use the `ClippedNoiseSoftmax` module in your neural network, simply add it after the softmax layer. Here's an example:
 
 ```python
 import torch.nn as nn
@@ -99,7 +107,7 @@ class MyModel(nn.Module):
         self.fc2 = nn.Linear(256, 128)
         self.fc3 = nn.Linear(128, 10)
         self.softmax = nn.Softmax(dim=1)
-        self.noisy_softmax = NoisySoftmax(stddev=1.0, alpha=0.1, log=False)
+        self.noisy_softmax = ClippedNoiseSoftmax(stddev=1.0, alpha=0.1, log=False)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -115,12 +123,12 @@ model = MyModel()
 
 # Installation
 
-To install the `NoisySoftmax` module, simply save the code in a Python file (e.g., `noisy_softmax.py`) and import it into your project.
+To install the `ClippedNoiseSoftmax` module, simply save the code in a Python file (e.g., `clipped_noise_softmax.py`) and import it into your project.
 
 
 # Example
 
-Here is an example of how to train a neural network with the NoisySoftmax layer using the MNIST dataset:
+Here is an example of how to train a neural network with the ClippedNoiseSoftmax layer using the MNIST dataset:
 
 
 ```python
@@ -128,7 +136,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
-from noisy_softmax import NoisySoftmax
+from clipped_noisy_softmax import ClippedNoiseSoftmax
 
 # Define the model
 class MyModel(nn.Module):
@@ -138,7 +146,7 @@ class MyModel(nn.Module):
         self.fc2 = nn.Linear(256, 128)
         self.fc3 = nn.Linear(128, 10)
         self.softmax = nn.Softmax(dim=1)
-        self.noisy_softmax = NoisySoftmax(stddev=1.0, alpha=0.1, log=False)
+        self.noisy_softmax = ClippedNoiseSoftmax(stddev=1.0, alpha=0.1, log=False)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -187,7 +195,7 @@ with torch.no_grad():
 print(f"Accuracy: {correct / total * 100}%")
 ```
 
-This example demonstrates how to train and test a neural network with the NoisySoftmax layer on the MNIST dataset. The model learns with added noise during training, potentially improving its generalization capabilities.
+This example demonstrates how to train and test a neural network with the ClippedNoiseSoftmax layer on the MNIST dataset. The model learns with added noise during training, potentially improving its generalization capabilities.
 
 # License
 
