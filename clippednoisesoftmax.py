@@ -47,13 +47,13 @@ class ClippedNoiseSoftmax(nn.Module):
         lower_limit = self.alpha  # Calculate the lower limit for filtering (e.g., 0.1)
 
         # Calculate the noise for values greater than the upper limit
-        noise_one = noise * (-1) * F.hardtanh(x, upper_limit, 1.0) / upper_limit
+        noise_one = noise * (-1) * F.hardtanh(x, upper_limit, 1.0)
 
         # Calculate the noise for values between 0 and the lower limit
-        noise_zero = noise * self.center_function(x, 0.0, lower_limit) / lower_limit
+        noise_zero = noise * self.center_function(x, 0.0, lower_limit) 
 
         # Combine both noises and clamp the result between 0 and 1
-        return torch.clamp(noise_one + noise_zero, min=0.0, max=1.0)
+        return noise_one + noise_zero
 
     def forward(self, x):
         """
@@ -74,6 +74,7 @@ class ClippedNoiseSoftmax(nn.Module):
             )  # Generate random noise with the same shape as x
             noise = self.filter_noise(x, noise)  # Apply the noise filter
             output = x + noise  # Add the filtered noise to the input
+            output = torch.clamp(output, min=0.0, max=1.0)
 
             if self.log:  # If input was in log space, convert back to log space
                 output = torch.log(output)
